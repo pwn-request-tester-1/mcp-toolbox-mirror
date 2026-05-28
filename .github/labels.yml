@@ -1,0 +1,3 @@
+- name: "tests: run"
+  description: "Trigger conformance tests on PR"
+  color: "0e8a16"

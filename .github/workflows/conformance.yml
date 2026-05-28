@@ -1,0 +1,50 @@
+# Mirror of googleapis/mcp-toolbox conformance.yml
+# This replicates the vulnerable pattern for E2E PoC demonstration
+name: Conformance Tests
+
+on:
+  pull_request:
+  pull_request_target:
+    types: [labeled]
+
+permissions:
+  read-all
+
+jobs:
+  conformance:
+    # This condition mirrors the original: allows pull_request (safe, fork context)
+    # AND pull_request_target with 'tests: run' label (DANGEROUS: base context + fork code)
+    if: "${{ github.event.action != 'labeled' || github.event.label.name == 'tests: run' }}"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      issues: 'write'
+      pull-requests: 'write'
+    steps:
+      # VULNERABILITY: checks out code from the FORK, not the base branch
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      # VULNERABILITY: compiles and EXECUTES the fork's Go code
+      # Any init() function or main() modification runs with base repo permissions
+      - name: Build and run server
+        run: |
+          echo "Building from: ${{ github.event.pull_request.head.repo.full_name }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.event.pull_request.head.sha }}"
+          go build -o toolbox .
+          timeout 5 ./toolbox || true
+
+      - name: Print token info (demonstrates access)
+        run: |
+          echo "GITHUB_TOKEN accessible: $([ -n "${{ secrets.GITHUB_TOKEN }}" ] && echo YES || echo NO)"
+          echo "Repository: ${{ github.repository }}"
+          echo "Event name: ${{ github.event_name }}"
